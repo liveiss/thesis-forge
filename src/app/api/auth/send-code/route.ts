@@ -14,6 +14,7 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error('[发送验证码失败]', error);
+      console.error('[发送验证码失败原因]', (error as any).cause || '无 cause');
       return NextResponse.json({ error: error.message || '发送失败' }, { status: 500 });
     }
 
