@@ -7,6 +7,7 @@ import { getMaterialTemplate, getDimensionLabels, splitByTemplate, DEFAULT_MATER
 import { maskCitations, restoreCitations } from '../lib/citations';
 import { useAuth } from '../lib/auth';
 import { saveProject, listProjects, deleteProject, getProject, restoreProject, type ProjectMeta } from '../lib/db';
+import { useToast } from './components/ToastProvider';
 
 import LoginModal from './components/LoginModal';
 import ImportView from './components/ImportView';
@@ -68,6 +69,8 @@ function normalizeSectionScores(value: unknown): Record<string, number> {
 }
 
 export default function Home() {
+  const { error: toastError, warning: toastWarning } = useToast();
+
   // ========== 用户系统 ==========
   const { user, logout, canUse, recordUsage, updateUser } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
@@ -83,7 +86,7 @@ export default function Home() {
 
   const callAi = useCallback(async (prompt: string, type: string): Promise<string | null> => {
     if (!apiConfig.baseUrl && !apiConfig.model) {
-      alert('请先配置 API Base URL 或模型');
+      toastWarning('请先配置 API Base URL 或模型');
       return null;
     }
     try {
@@ -96,20 +99,20 @@ export default function Home() {
       if (!res.ok) {
         const message = data.error || `AI 请求失败（${res.status}）`;
         console.warn('[AI 请求失败]', message);
-        alert(message);
+        toastError(message);
         return null;
       }
       const response = data.response?.trim();
       if (!response) {
         const message = data.error || 'AI 返回了空内容';
         console.warn('[AI 返回空内容]', message);
-        alert(message);
+        toastError(message);
         return null;
       }
       return response;
     } catch (err) {
       console.warn('[AI 请求异常]', err);
-      alert('AI 请求失败，请检查网络或 API 配置');
+      toastError('AI 请求失败，请检查网络或 API 配置');
       return null;
     }
   }, [apiConfig]);
@@ -128,6 +131,7 @@ export default function Home() {
   const [thesisReport, setThesisReport] = useState<ThesisReport | null>(null);
   const [thesisDetectLoading, setThesisDetectLoading] = useState(false);
   const [showThesisReport, setShowThesisReport] = useState(false);
+  const [showMobileSectionSidebar, setShowMobileSectionSidebar] = useState(false);
   const [diagnosticLoading, setDiagnosticLoading] = useState(false);
   const [fixingIssueId, setFixingIssueId] = useState<string | null>(null);
   const [fixStage, setFixStage] = useState('');
@@ -211,7 +215,7 @@ export default function Home() {
       setProjectTitle(restoredProj.title);
     } catch (e) {
       console.warn('[加载项目] 失败', e);
-      alert('加载项目失败');
+      toastError('加载项目失败');
     } finally {
       setHistoryLoading(false);
     }
@@ -232,7 +236,7 @@ export default function Home() {
       }
     } catch (e) {
       console.warn('[删除项目] 失败', e);
-      alert('删除失败');
+      toastError('删除失败');
     }
   }, [user, project, projectHistory]);
 
@@ -439,7 +443,7 @@ ${sectionBlocks}
   const handleDetectAll = async () => {
     if (!project || thesisDetectLoading) return;
     if (user && !canUse('detect')) {
-      alert('免费检测次数已用完，请升级套餐');
+      toastWarning('免费检测次数已用完，请升级套餐');
       setShowPricing(true);
       return;
     }
@@ -693,7 +697,7 @@ ${maskedPassage}
   const handleDetect = async () => {
     if (!selectedSection) return;
     if (user && !canUse('detect')) {
-      alert('免费检测次数已用完，请升级套餐');
+      toastWarning('免费检测次数已用完，请升级套餐');
       setShowPricing(true);
       return;
     }
@@ -708,12 +712,12 @@ ${maskedPassage}
         const shouldFix = window.confirm(`检测完成，综合 ${diag.overallScore} 分。是否进入自动修正闭环？修正会改写当前章节。`);
         if (!shouldFix) return;
         if (!user) {
-          alert('请先登录后使用自动修正');
+          toastWarning('请先登录后使用自动修正');
           setShowLogin(true);
           return;
         }
         if (!canUse('fix')) {
-          alert('当前套餐不包含自动修正，请升级套餐');
+          toastWarning('当前套餐不包含自动修正，请升级套餐');
           setShowPricing(true);
           return;
         }
@@ -756,7 +760,7 @@ ${maskedPassage}
       URL.revokeObjectURL(url);
     } catch (err) {
       console.warn('[导出 docx 失败]', err);
-      alert('导出 Word 失败，已自动切换为纯文本导出');
+      toastWarning('导出 Word 失败，已自动切换为纯文本导出');
       handleExportTxt();
     }
   };
@@ -769,12 +773,12 @@ ${maskedPassage}
   ) => {
     if (!selectedSectionId || !selectedSection) return;
     if (!user) {
-      alert('请先登录后使用修改功能');
+      toastWarning('请先登录后使用修改功能');
       setShowLogin(true);
       return;
     }
     if (!canUse('fix')) {
-      alert('当前套餐不包含修改功能，请升级套餐');
+      toastWarning('当前套餐不包含修改功能，请升级套餐');
       setShowPricing(true);
       return;
     }
@@ -800,12 +804,12 @@ ${maskedPassage}
     const d = currentDiagnostic[dim];
     if (!d.issues.length) return;
     if (!user) {
-      alert('请先登录后使用修改功能');
+      toastWarning('请先登录后使用修改功能');
       setShowLogin(true);
       return;
     }
     if (!canUse('fix')) {
-      alert('当前套餐不包含修改功能，请升级套餐');
+      toastWarning('当前套餐不包含修改功能，请升级套餐');
       setShowPricing(true);
       return;
     }
@@ -933,20 +937,58 @@ ${maskedPassage}
   // ========== 主界面 ==========
   return (
     <div className="min-h-screen text-theme-primary flex">
-      <SectionSidebar
-        project={project}
-        selectedSectionId={selectedSectionId}
-        diagnostics={diagnostics}
-        userPhone={user?.phone}
-        userPlan={user?.plan}
-        detectCount={user?.detectCount}
-        onSelectSection={setSelectedSectionId}
-        onExportTxt={handleExportTxt}
-        onExportDocx={handleExportDocx}
-        onBackToHome={handleBackToHome}
-        onReset={handleReset}
-        onOpenPricing={() => setShowPricing(true)}
-      />
+      {/* Desktop Section Sidebar */}
+      <div className="hidden md:flex">
+        <SectionSidebar
+          project={project}
+          selectedSectionId={selectedSectionId}
+          diagnostics={diagnostics}
+          userPhone={user?.phone}
+          userPlan={user?.plan}
+          detectCount={user?.detectCount}
+          onSelectSection={setSelectedSectionId}
+          onExportTxt={handleExportTxt}
+          onExportDocx={handleExportDocx}
+          onBackToHome={handleBackToHome}
+          onReset={handleReset}
+          onOpenPricing={() => setShowPricing(true)}
+        />
+      </div>
+
+      {/* Mobile Section Sidebar Drawer */}
+      {showMobileSectionSidebar && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 z-40 md:hidden"
+            onClick={() => setShowMobileSectionSidebar(false)}
+          />
+          <div className="fixed left-0 top-0 bottom-0 w-64 z-50 md:hidden">
+            <SectionSidebar
+              project={project}
+              selectedSectionId={selectedSectionId}
+              diagnostics={diagnostics}
+              userPhone={user?.phone}
+              userPlan={user?.plan}
+              detectCount={user?.detectCount}
+              onSelectSection={(id) => {
+                setSelectedSectionId(id);
+                setShowMobileSectionSidebar(false);
+              }}
+              onExportTxt={handleExportTxt}
+              onExportDocx={handleExportDocx}
+              onBackToHome={() => {
+                handleBackToHome();
+                setShowMobileSectionSidebar(false);
+              }}
+              onReset={handleReset}
+              onOpenPricing={() => {
+                setShowPricing(true);
+                setShowMobileSectionSidebar(false);
+              }}
+            />
+          </div>
+        </>
+      )}
 
       {selectedSection && (
         <EditorView
@@ -961,6 +1003,7 @@ ${maskedPassage}
           showDiagnostics={showDiagnostics}
           fixingIssueId={fixingIssueId}
           fixStage={fixStage}
+          onOpenSectionSidebar={() => setShowMobileSectionSidebar(true)}
           onDetect={handleDetect}
           onDetectAll={handleDetectAll}
           onShowReport={() => setShowThesisReport(true)}

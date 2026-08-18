@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Search, RefreshCw, Eye, EyeOff, FileText } from 'lucide-react';
+import { Search, RefreshCw, Eye, EyeOff, FileText, Menu } from 'lucide-react';
 import type { ThesisSection, ThesisDiagnostic, ThesisReport, DiagnosticDimension } from '../../types';
 import { highlightCitationSentences } from '../../lib/citations';
 import DimensionPanel from './DimensionPanel';
@@ -19,6 +19,7 @@ interface EditorViewProps {
   showDiagnostics: boolean;
   fixingIssueId: string | null;
   fixStage: string;
+  onOpenSectionSidebar?: () => void;
   onDetect: () => void;
   onDetectAll: () => void;
   onShowReport: () => void;
@@ -54,6 +55,7 @@ export default function EditorView({
   showDiagnostics,
   fixingIssueId,
   fixStage,
+  onOpenSectionSidebar,
   onDetect,
   onDetectAll,
   onShowReport,
@@ -109,7 +111,16 @@ export default function EditorView({
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-theme-page">
       {/* Toolbar */}
-      <div className="px-5 py-3 border-b border-theme-subtle flex items-center gap-3 shrink-0">
+      <div className="px-3 md:px-5 py-3 border-b border-theme-subtle flex items-center gap-2 md:gap-3 shrink-0 overflow-x-auto">
+        {onOpenSectionSidebar && (
+          <button
+            onClick={onOpenSectionSidebar}
+            className="md:hidden p-2 -ml-1 rounded-lg text-theme-dim hover:text-theme-muted hover:bg-theme-surface-4 transition-colors shrink-0"
+            aria-label="打开章节列表"
+          >
+            <Menu size={18} />
+          </button>
+        )}
         <button
           onClick={onDetect}
           disabled={isBusy}
@@ -234,7 +245,7 @@ export default function EditorView({
 
       {/* Editor Area */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-6 py-8">
+        <div className="max-w-3xl mx-auto px-4 md:px-6 py-6 md:py-8">
           <div className="mb-6">
             <span className="text-[10px] uppercase tracking-wider text-theme-faint font-medium">
               {section.type}

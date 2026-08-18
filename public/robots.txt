@@ -1,0 +1,5 @@
+User-Agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://starlit-profiterole-b37340.netlify.app/sitemap.xml

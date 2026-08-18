@@ -19,6 +19,8 @@ import {
   Globe,
   Sun,
   Moon,
+  Menu,
+  X,
 } from 'lucide-react';
 import type { ApiConfig } from '../../types';
 import { extractDocxText, extractDocxSections } from '../../lib/utils';
@@ -26,6 +28,7 @@ import { MATERIAL_TEMPLATES } from '../../lib/templates';
 import ProjectSidebar from './ProjectSidebar';
 import type { ProjectMeta } from '../../lib/db';
 import { useTheme } from './ThemeProvider';
+import { useToast } from './ToastProvider';
 
 interface ImportViewProps {
   user: { phone: string; plan: string } | null;
@@ -106,9 +109,11 @@ export default function ImportView({
   onDeleteProject,
   onOpenPricing,
 }: ImportViewProps) {
+  const { error: toastError } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [parsingDocx, setParsingDocx] = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const dragCounter = useRef(0);
   const dropZoneRef = useRef<HTMLDivElement>(null);
 
@@ -155,7 +160,7 @@ export default function ImportView({
         }
       } catch (err) {
         console.warn('[docx 解析失败]', err);
-        alert('无法解析该 .docx 文件，请尝试另存为 .txt 后上传');
+        toastError('无法解析该 .docx 文件，请尝试另存为 .txt 后上传');
       } finally {
         setParsingDocx(false);
       }
@@ -172,7 +177,7 @@ export default function ImportView({
       return;
     }
 
-    alert('不支持的文件格式，请上传 .txt 或 .docx 文件');
+    toastError('不支持的文件格式，请上传 .txt 或 .docx 文件');
   }, [onFileSelect, onDocxSectionsSelect]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -221,8 +226,8 @@ export default function ImportView({
 
   return (
     <div className="min-h-screen bg-theme-base text-theme-primary relative overflow-hidden flex">
-      {/* ===== Project Sidebar ===== */}
-      <div className="w-72 shrink-0">
+      {/* ===== Project Sidebar (desktop) ===== */}
+      <div className="hidden md:block w-72 shrink-0">
         <ProjectSidebar
           projects={projectHistory}
           loading={historyLoading}
@@ -231,6 +236,28 @@ export default function ImportView({
           onDeleteProject={onDeleteProject}
         />
       </div>
+
+      {/* ===== Mobile Sidebar Drawer ===== */}
+      {showMobileSidebar && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 z-40 md:hidden"
+            onClick={() => setShowMobileSidebar(false)}
+          />
+          <div className="fixed left-0 top-0 bottom-0 w-72 z-50 md:hidden">
+            <ProjectSidebar
+              projects={projectHistory}
+              loading={historyLoading}
+              currentProjectTitle={projectTitle}
+              onLoadProject={(id) => {
+                onLoadProject(id);
+                setShowMobileSidebar(false);
+              }}
+              onDeleteProject={onDeleteProject}
+            />
+          </div>
+        </>
+      )}
 
       {/* ===== Main Area ===== */}
       <div className="flex-1 flex flex-col min-w-0 relative">
@@ -249,19 +276,26 @@ export default function ImportView({
         </div>
 
         {/* ===== Top Nav ===== */}
-        <nav className="relative flex items-center justify-between px-8 py-5 z-10">
+        <nav className="relative flex items-center justify-between px-4 md:px-8 py-4 md:py-5 z-10">
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowMobileSidebar(true)}
+            className="md:hidden p-2 -ml-2 rounded-lg text-theme-dim hover:text-theme-muted hover:bg-theme-surface-4 transition-colors"
+            aria-label="打开历史项目"
+          >
+            <Menu size={18} />
+          </button>
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
             <FileText size={17} className="text-white" />
           </div>
-          <span className="text-sm font-bold tracking-tight text-theme-primary">论文工坊</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-theme-surface-4 text-theme-dim border border-theme-subtle">
+          <span className="text-sm font-bold tracking-tight text-theme-primary hidden sm:inline">论文工坊</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-theme-surface-4 text-theme-dim border border-theme-subtle hidden sm:inline">
             Beta
           </span>
         </div>
 
         {user ? (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
             <button
               onClick={toggleTheme}
               className="p-2 rounded-lg text-theme-dim hover:text-theme-muted hover:bg-theme-surface-4 transition-colors"
@@ -269,19 +303,20 @@ export default function ImportView({
             >
               {resolvedTheme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
             </button>
-            <span className="text-xs text-theme-dim">{user.phone}</span>
-            <span className="text-[10px] px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/15 font-medium">
-              {user.plan === 'free' ? '免费版' : user.plan === 'season' ? '通行证' : user.plan}
+            <span className="text-xs text-theme-dim hidden md:inline">{user.phone}</span>
+            <span className="text-[10px] px-2 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/15 font-medium">
+              {user.plan === 'free' ? '免费' : user.plan === 'season' ? '通行' : user.plan}
             </span>
             {user.plan !== 'season' && (
               <button
                 onClick={onOpenPricing}
-                className="text-[11px] px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 border border-cyan-500/15 transition-colors"
+                className="text-[11px] px-2 py-1 rounded-lg bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 border border-cyan-500/15 transition-colors"
               >
-                升级套餐
+                <span className="hidden sm:inline">升级套餐</span>
+                <span className="sm:hidden">升级</span>
               </button>
             )}
-            <button onClick={onLogout} className="text-theme-dim hover:text-theme-tertiary transition-colors p-1.5 rounded-lg hover:bg-theme-surface-4">
+            <button onClick={onLogout} className="text-theme-dim hover:text-theme-tertiary transition-colors p-1.5 rounded-lg hover:bg-theme-surface-4" title="退出登录">
               <LogOut size={14} />
             </button>
           </div>
@@ -296,16 +331,17 @@ export default function ImportView({
             </button>
             <button
               onClick={onLogin}
-              className="flex items-center gap-2 text-sm text-theme-muted hover:text-cyan-300 transition-colors px-3 py-1.5 rounded-lg hover:bg-theme-surface-4"
+              className="flex items-center gap-2 text-sm text-theme-muted hover:text-cyan-300 transition-colors px-2 md:px-3 py-1.5 rounded-lg hover:bg-theme-surface-4"
             >
               <UserIcon size={15} />
-              登录
+              <span className="hidden sm:inline">登录</span>
             </button>
             <button
               onClick={onOpenPricing}
-              className="text-[11px] px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 border border-cyan-500/15 transition-colors"
+              className="text-[11px] px-2 md:px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 border border-cyan-500/15 transition-colors"
             >
-              开通套餐
+              <span className="hidden sm:inline">开通套餐</span>
+              <span className="sm:hidden">套餐</span>
             </button>
           </div>
         )}
@@ -313,16 +349,16 @@ export default function ImportView({
 
         {/* ===== Main Content ===== */}
         <div className="relative z-10 flex-1 overflow-auto">
-          <div className="max-w-6xl xl:max-w-7xl mx-auto px-8 pt-8 pb-20">
+          <div className="max-w-6xl xl:max-w-7xl mx-auto px-4 md:px-8 pt-6 md:pt-8 pb-12 md:pb-20">
 
         {/* Hero Section */}
-        <div className="text-center mb-16">
-          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-8 ${resolvedTheme === 'light' ? 'bg-cyan-50 border border-cyan-200' : 'bg-theme-surface-3 border border-theme-subtle'}`}>
+        <div className="text-center mb-10 md:mb-16">
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-6 md:mb-8 ${resolvedTheme === 'light' ? 'bg-cyan-50 border border-cyan-200' : 'bg-theme-surface-3 border border-theme-subtle'}`}>
             <Zap size={12} className="text-cyan-400" />
             <span className="text-[11px] text-theme-muted">AI 驱动的论文质量检测与修正工具</span>
           </div>
 
-          <h1 className="text-5xl font-extrabold tracking-tight mb-5">
+          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight mb-4 md:mb-5">
             <span className="bg-gradient-to-r from-cyan-300 via-blue-300 to-cyan-300 bg-clip-text text-transparent">
               论文工坊
             </span>
@@ -337,7 +373,7 @@ export default function ImportView({
         </div>
 
         {/* Features Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-16">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-10 md:mb-16">
           {features.map((f) => {
             const theme = resolvedTheme === 'light' ? f.light : f.dark;
             return (
@@ -363,14 +399,14 @@ export default function ImportView({
                 <button
                   key={template.id}
                   onClick={() => onMaterialTypeChange(template.id)}
-                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-colors ${
+                  className={`flex-1 flex items-center justify-center gap-1 md:gap-2 px-2 md:px-4 py-2 md:py-2.5 rounded-lg text-xs font-semibold transition-colors ${
                     selectedMaterialType === template.id
                       ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/15'
                       : 'text-theme-muted hover:text-theme-tertiary hover:bg-theme-surface-3 border border-transparent'
                   }`}
                 >
                   <span>{template.label}</span>
-                  <span className="text-[10px] opacity-70">{template.shortLabel}</span>
+                  <span className="text-[10px] opacity-70 hidden sm:inline">{template.shortLabel}</span>
                 </button>
               ))}
             </div>
