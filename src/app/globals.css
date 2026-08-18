@@ -1,26 +1,174 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ============================================
+   Theme System - CSS Variables
+   ============================================ */
+
+:root, [data-theme="dark"] {
+  /* Backgrounds */
+  --bg-base: #06070a;
+  --bg-page: #080a0f;
+  --bg-card: #0c0e12;
+  --bg-panel: #0f1117;
+  --bg-overlay: #11141a;
+
+  /* Surface layers (hover / pressed / subtle backgrounds) */
+  --bg-surface-1: rgba(255,255,255,0.015);
+  --bg-surface-2: rgba(255,255,255,0.02);
+  --bg-surface-3: rgba(255,255,255,0.03);
+  --bg-surface-4: rgba(255,255,255,0.04);
+  --bg-surface-5: rgba(255,255,255,0.05);
+  --bg-surface-6: rgba(255,255,255,0.06);
+  --bg-surface-8: rgba(255,255,255,0.08);
+  --bg-surface-10: rgba(255,255,255,0.10);
+  --bg-surface-12: rgba(255,255,255,0.12);
+
+  /* Borders */
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-medium: rgba(255,255,255,0.08);
+  --border-strong: rgba(255,255,255,0.12);
+
+  /* Text */
+  --text-primary: #f3f4f6;
+  --text-secondary: #e5e7eb;
+  --text-tertiary: #d1d5db;
+  --text-muted: #9ca3af;
+  --text-dim: #6b7280;
+  --text-faint: #4b5563;
+  --text-ghost: #374151;
+
+  /* Overlays */
+  --overlay-backdrop: rgba(0,0,0,0.50);
+
+  /* Scrollbar */
+  --scrollbar-thumb: rgba(255,255,255,0.08);
+  --scrollbar-thumb-hover: rgba(255,255,255,0.15);
+
+  /* Selection */
+  --selection-bg: rgba(6, 182, 212, 0.25);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+[data-theme="light"] {
+  /* Backgrounds — 小清新薄荷绿 */
+  --bg-base: #f0f7f4;
+  --bg-page: #f0f7f4;
+  --bg-card: #ffffff;
+  --bg-panel: #e5f0ec;
+  --bg-overlay: #ffffff;
+
+  /* Surface layers — 明显可见的 hover/pressed 区分 */
+  --bg-surface-1: rgba(0,0,0,0.03);
+  --bg-surface-2: rgba(0,0,0,0.05);
+  --bg-surface-3: rgba(0,0,0,0.07);
+  --bg-surface-4: rgba(0,0,0,0.09);
+  --bg-surface-5: rgba(0,0,0,0.12);
+  --bg-surface-6: rgba(0,0,0,0.15);
+  --bg-surface-8: rgba(0,0,0,0.18);
+  --bg-surface-10: rgba(0,0,0,0.22);
+  --bg-surface-12: rgba(0,0,0,0.28);
+
+  /* Borders — 确保卡片/输入框有清晰边界 */
+  --border-subtle: rgba(0,0,0,0.14);
+  --border-medium: rgba(0,0,0,0.22);
+  --border-strong: rgba(0,0,0,0.32);
+
+  /* Text — 深色确保对比度 */
+  --text-primary: #0f172a;
+  --text-secondary: #1e293b;
+  --text-tertiary: #334155;
+  --text-muted: #475569;
+  --text-dim: #64748b;
+  --text-faint: #94a3b8;
+  --text-ghost: #94a3b8;
+
+  /* Overlays */
+  --overlay-backdrop: rgba(0,0,0,0.25);
+
+  /* Scrollbar */
+  --scrollbar-thumb: rgba(0,0,0,0.18);
+  --scrollbar-thumb-hover: rgba(0,0,0,0.28);
+
+  /* Selection */
+  --selection-bg: rgba(6, 182, 212, 0.15);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* ============================================
+   Tailwind v4 @utility shortcuts
+   ============================================ */
+
+@utility bg-theme-base        { background-color: var(--bg-base); }
+@utility bg-theme-page        { background-color: var(--bg-page); }
+@utility bg-theme-card        { background-color: var(--bg-card); }
+@utility bg-theme-panel       { background-color: var(--bg-panel); }
+@utility bg-theme-overlay     { background-color: var(--bg-overlay); }
+@utility bg-theme-surface-1   { background-color: var(--bg-surface-1); }
+@utility bg-theme-surface-2   { background-color: var(--bg-surface-2); }
+@utility bg-theme-surface-3   { background-color: var(--bg-surface-3); }
+@utility bg-theme-surface-4   { background-color: var(--bg-surface-4); }
+@utility bg-theme-surface-5   { background-color: var(--bg-surface-5); }
+@utility bg-theme-surface-6   { background-color: var(--bg-surface-6); }
+@utility bg-theme-surface-8   { background-color: var(--bg-surface-8); }
+@utility bg-theme-surface-10  { background-color: var(--bg-surface-10); }
+@utility bg-theme-surface-12  { background-color: var(--bg-surface-12); }
+
+@utility text-theme-primary   { color: var(--text-primary); }
+@utility text-theme-secondary { color: var(--text-secondary); }
+@utility text-theme-tertiary  { color: var(--text-tertiary); }
+@utility text-theme-muted     { color: var(--text-muted); }
+@utility text-theme-dim       { color: var(--text-dim); }
+@utility text-theme-faint     { color: var(--text-faint); }
+@utility text-theme-ghost     { color: var(--text-ghost); }
+
+@utility border-theme-subtle  { border-color: var(--border-subtle); }
+@utility border-theme-medium  { border-color: var(--border-medium); }
+@utility border-theme-strong  { border-color: var(--border-strong); }
+
+@utility bg-theme-backdrop    { background-color: var(--overlay-backdrop); }
+
+/* ============================================
+   Base Styles
+   ============================================ */
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: inherit;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.citation-sentence {
+  background: rgba(6, 182, 212, 0.16);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 2px 4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+[data-theme="light"] .citation-sentence {
+  background: rgba(8, 145, 178, 0.13);
+  color: #0f172a;
 }
