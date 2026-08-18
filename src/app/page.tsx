@@ -8,6 +8,7 @@ import { maskCitations, restoreCitations } from '../lib/citations';
 import { useAuth } from '../lib/auth';
 import { saveProject, listProjects, deleteProject, getProject, restoreProject, type ProjectMeta } from '../lib/db';
 import { useToast } from './components/ToastProvider';
+import { supabase } from '../lib/supabase';
 
 import LoginModal from './components/LoginModal';
 import ImportView from './components/ImportView';
@@ -90,9 +91,14 @@ export default function Home() {
       return null;
     }
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
       const res = await fetch('/api/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ ...apiConfig, prompt, type }),
       });
       const data = await res.json();
@@ -240,14 +246,8 @@ export default function Home() {
     }
   }, [user, project, projectHistory]);
 
-  const handleSelectPlan = (plan: PlanId) => {
-    if (!user) {
-      setShowPricing(false);
-      setShowLogin(true);
-      return;
-    }
-    updateUser({ plan });
-    setShowPricing(false);
+  const handlePlanUpgraded = (plan: Exclude<PlanId, 'free'>, expiresAt: string) => {
+    updateUser({ plan, planExpire: expiresAt });
   };
 
   // ========== 导入材料 ==========
@@ -926,7 +926,7 @@ ${maskedPassage}
         {showPricing && (
           <PricingModal
             currentPlan={user?.plan || 'free'}
-            onSelectPlan={handleSelectPlan}
+            onPlanUpgraded={handlePlanUpgraded}
             onClose={() => setShowPricing(false)}
           />
         )}
@@ -1031,7 +1031,7 @@ ${maskedPassage}
       {showPricing && (
         <PricingModal
           currentPlan={user?.plan || 'free'}
-          onSelectPlan={handleSelectPlan}
+          onPlanUpgraded={handlePlanUpgraded}
           onClose={() => setShowPricing(false)}
         />
       )}

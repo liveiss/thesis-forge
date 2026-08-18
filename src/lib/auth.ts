@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { supabase } from './supabase';
 
 export interface User {
   id: string;
@@ -13,120 +14,223 @@ export interface User {
 }
 
 const SESSION_KEY = 'thesis_forge_session';
-let cachedUser: User | null | undefined;
-const listeners = new Set<() => void>();
+const PROFILE_KEY = 'thesis_forge_profile';
 
-function readStoredUser(): User | null {
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+function readStoredProfile(): Partial<User> | null {
   if (typeof window === 'undefined') return null;
   try {
-    const stored = localStorage.getItem(SESSION_KEY);
-    if (!stored) return null;
-    const session = JSON.parse(stored) as Partial<User>;
-    if (!session.phone) return null;
-    // 兼容旧版：修复带时间戳的非确定性 ID
-    if (session.id && session.id.includes('_') && session.id.split('_').length > 2) {
-      session.id = `user_${session.phone}`;
-    }
-    return session as User;
+    const raw = localStorage.getItem(PROFILE_KEY);
+    return raw ? (JSON.parse(raw) as Partial<User>) : null;
   } catch {
     return null;
   }
 }
 
-function getSessionSnapshot(): User | null {
-  if (cachedUser === undefined) {
-    cachedUser = readStoredUser();
+function storeProfile(profile: Partial<User> | null) {
+  if (typeof window === 'undefined') return;
+  if (profile) {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  } else {
+    localStorage.removeItem(PROFILE_KEY);
   }
-  return cachedUser;
-}
-
-function subscribeSession(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function setSession(user: User | null): void {
-  cachedUser = user;
-  if (typeof window !== 'undefined') {
-    if (user) {
-      localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(SESSION_KEY);
-    }
-  }
-  listeners.forEach(listener => listener());
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String(error.message);
+  }
+  return String(error);
 }
 
 export function useAuth() {
-  const user = useSyncExternalStore(subscribeSession, getSessionSnapshot, () => null);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState<'supabase' | 'local'>('supabase');
+
+  // 初始加载：监听 Supabase session，同时尝试恢复本地缓存
+  useEffect(() => {
+    if (!hasSupabaseConfig()) {
+      const stored = readStoredProfile();
+      if (stored?.id && stored.phone) {
+        setUser({
+          id: stored.id,
+          phone: stored.phone,
+          createdAt: stored.createdAt || new Date().toISOString(),
+          plan: stored.plan || 'free',
+          planExpire: stored.planExpire,
+          detectCount: stored.detectCount || 0,
+          fixCount: stored.fixCount || 0,
+        });
+      }
+      setLoading(false);
+      setMode('local');
+      return;
+    }
+
+    setMode('supabase');
+
+    // 初始 session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        await hydrateUser(session.user);
+      }
+      setLoading(false);
+    });
+
+    // 监听登录态变化
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        await hydrateUser(session.user);
+      } else {
+        setUser(null);
+        storeProfile(null);
+      }
+    });
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  async function hydrateUser(supabaseUser: { id: string; phone?: string }) {
+    const phone = supabaseUser.phone || '';
+
+    // 读取或创建 profile
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', supabaseUser.id)
+      .single();
+
+    if (error || !profile) {
+      // 触发器可能还没跑完，尝试创建
+      const { error: upsertError } = await supabase.from('profiles').upsert({
+        id: supabaseUser.id,
+        phone,
+        plan: 'free',
+      });
+      if (upsertError) {
+        console.warn('[hydrateUser] profile 创建失败', upsertError);
+      }
+    }
+
+    const merged: User = {
+      id: supabaseUser.id,
+      phone,
+      createdAt: profile?.created_at || new Date().toISOString(),
+      plan: (profile?.plan as User['plan']) || 'free',
+      planExpire: profile?.plan_expire || undefined,
+      detectCount: 0,
+      fixCount: 0,
+    };
+
+    setUser(merged);
+    storeProfile(merged);
+  }
 
   const sendCode = useCallback(async (phone: string): Promise<{ ok: boolean; error?: string }> => {
     if (!/^1\d{10}$/.test(phone)) return { ok: false, error: '手机号格式不正确' };
 
-    try {
+    if (mode === 'local') {
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       localStorage.setItem(`code_${phone}`, code);
-      // TODO: 生产环境接入真实短信服务
-      console.log(`[验证码] ${phone}: ${code}`);
+      console.log(`[本地模拟验证码] ${phone}: ${code}`);
       return { ok: true };
-    } catch (error: unknown) {
+    }
+
+    const { error } = await supabase.auth.signInWithOtp({ phone });
+    if (error) {
       return { ok: false, error: errorMessage(error) };
     }
-  }, []);
+    return { ok: true };
+  }, [mode]);
 
   const verifyCode = useCallback(async (phone: string, code: string): Promise<{ ok: boolean; error?: string }> => {
-    const storedCode = localStorage.getItem(`code_${phone}`);
-    if (!storedCode) return { ok: false, error: '请先获取验证码' };
-    if (storedCode !== code) return { ok: false, error: '验证码错误' };
+    if (mode === 'local') {
+      const storedCode = localStorage.getItem(`code_${phone}`);
+      if (!storedCode) return { ok: false, error: '请先获取验证码' };
+      if (storedCode !== code) return { ok: false, error: '验证码错误' };
+      localStorage.removeItem(`code_${phone}`);
+      const newUser: User = {
+        id: `user_${phone}`,
+        phone,
+        createdAt: new Date().toISOString(),
+        plan: 'free',
+        detectCount: 0,
+        fixCount: 0,
+      };
+      setUser(newUser);
+      storeProfile(newUser);
+      return { ok: true };
+    }
 
-    localStorage.removeItem(`code_${phone}`);
-    const newUser: User = {
-      id: `user_${phone}`,
+    const { data, error } = await supabase.auth.verifyOtp({
       phone,
-      createdAt: new Date().toISOString(),
-      plan: 'free',
-      detectCount: 0,
-      fixCount: 0,
-    };
-    setSession(newUser);
-    return { ok: true };
-  }, []);
+      token: code,
+      type: 'sms',
+    });
 
-  const logout = useCallback(() => {
-    setSession(null);
-  }, []);
+    if (error || !data.user) {
+      return { ok: false, error: error ? errorMessage(error) : '验证失败' };
+    }
+
+    await hydrateUser(data.user);
+    return { ok: true };
+  }, [mode]);
+
+  const logout = useCallback(async () => {
+    if (mode === 'supabase') {
+      await supabase.auth.signOut();
+    }
+    setUser(null);
+    storeProfile(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(SESSION_KEY);
+    }
+  }, [mode]);
 
   const updateUser = useCallback((updates: Partial<User>) => {
-    const current = getSessionSnapshot();
-    if (!current) return;
-    setSession({ ...current, ...updates });
+    setUser(prev => {
+      if (!prev) return prev;
+      const next = { ...prev, ...updates };
+      storeProfile(next);
+      return next;
+    });
   }, []);
 
-  const recordUsage = useCallback((type: 'detect' | 'fix') => {
-    const current = getSessionSnapshot();
-    if (!current) return;
-    const updates = type === 'detect'
-      ? { detectCount: current.detectCount + 1 }
-      : { fixCount: current.fixCount + 1 };
-    setSession({ ...current, ...updates });
-  }, []);
+  const recordUsage = useCallback(async (type: 'detect' | 'fix') => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const updates = type === 'detect'
+        ? { detectCount: prev.detectCount + 1 }
+        : { fixCount: prev.fixCount + 1 };
+      const next = { ...prev, ...updates };
+      storeProfile(next);
+      return next;
+    });
+
+    if (mode === 'supabase' && user?.id) {
+      await supabase.from('usage_logs').insert({ user_id: user.id, type });
+    }
+  }, [mode, user?.id]);
 
   const canUse = useCallback((type: 'detect' | 'fix'): boolean => {
-    const current = getSessionSnapshot();
+    const current = user;
     if (!current) return false;
     if (current.plan === 'season') return true;
     if (current.plan === 'basic' || current.plan === 'deep') return true;
     if (type === 'detect') return current.detectCount < 1;
     return false;
-  }, []);
+  }, [user]);
 
   return {
     user,
-    loading: false,
+    loading,
+    mode,
     sendCode,
     verifyCode,
     logout,

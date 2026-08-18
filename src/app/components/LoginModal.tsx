@@ -115,7 +115,11 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
         )}
 
         <p className="text-[10px] text-theme-faint text-center mt-4 leading-relaxed">
-          登录即同意《用户协议》和《隐私政策》<br />
+          登录即同意
+          <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">《用户协议》</a>
+          和
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">《隐私政策》</a>
+          <br />
           本工具提供论文辅助修改服务，不提供代写
         </p>
       </div>

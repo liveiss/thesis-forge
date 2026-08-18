@@ -1,6 +1,6 @@
 // ==============================================
 // 论文工坊 - 数据持久化层
-// 优先 Supabase，未配置时回退到 localStorage
+// 生产环境强制 Supabase；未配置时降级到 localStorage（仅开发/测试）
 // ==============================================
 
 import { supabase } from './supabase';
@@ -47,11 +47,16 @@ const hasSupabaseConfig = (): boolean => {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 };
 
-// ========== localStorage 实现 ==========
+const isSupabaseReady = (): boolean => {
+  return hasSupabaseConfig();
+};
+
+// ========== localStorage 实现（降级） ==========
 
 const LS_KEY_PREFIX = 'thesis_forge_projects_';
 
 function lsGetProjects(userId: string): StoredProject[] {
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(`${LS_KEY_PREFIX}${userId}`);
     return raw ? JSON.parse(raw) : [];
@@ -61,6 +66,7 @@ function lsGetProjects(userId: string): StoredProject[] {
 }
 
 function lsSetProjects(userId: string, projects: StoredProject[]) {
+  if (typeof window === 'undefined') return;
   localStorage.setItem(`${LS_KEY_PREFIX}${userId}`, JSON.stringify(projects));
 }
 
@@ -74,7 +80,7 @@ export async function saveProject(
   report?: ThesisReport | null
 ): Promise<StoredProject> {
   const now = new Date().toISOString();
-  const existing = await getProject(userId, project.title); // 用标题+用户ID做唯一键
+  const existing = await getProject(userId, project.title);
 
   const stored: StoredProject = {
     id: existing?.id || `proj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -98,7 +104,7 @@ export async function saveProject(
     updatedAt: now,
   };
 
-  if (hasSupabaseConfig()) {
+  if (isSupabaseReady()) {
     const { error } = await supabase.from('projects').upsert({
       id: stored.id,
       user_id: userId,
@@ -126,7 +132,6 @@ export async function saveProject(
   if (idx >= 0) {
     projects[idx] = stored;
   } else {
-    // 同标题替换旧记录
     const sameTitleIdx = projects.findIndex(p => p.title === stored.title);
     if (sameTitleIdx >= 0) {
       projects[sameTitleIdx] = stored;
@@ -138,14 +143,14 @@ export async function saveProject(
   return stored;
 }
 
-/** 获取单个项目 */
+/** 获取单个项目（按 id 或标题） */
 export async function getProject(userId: string, projectId: string): Promise<StoredProject | null> {
-  if (hasSupabaseConfig()) {
+  if (isSupabaseReady()) {
     const { data, error } = await supabase
       .from('projects')
       .select('data')
       .eq('user_id', userId)
-      .eq('id', projectId)
+      .or(`id.eq.${projectId},title.eq.${projectId}`)
       .single();
 
     if (!error && data?.data) {
@@ -154,12 +159,12 @@ export async function getProject(userId: string, projectId: string): Promise<Sto
   }
 
   const projects = lsGetProjects(userId);
-  return projects.find(p => p.id === projectId) || null;
+  return projects.find(p => p.id === projectId || p.title === projectId) || null;
 }
 
 /** 列出用户所有项目 */
 export async function listProjects(userId: string): Promise<ProjectMeta[]> {
-  if (hasSupabaseConfig()) {
+  if (isSupabaseReady()) {
     const { data, error } = await supabase
       .from('projects')
       .select('id, title, data, created_at, updated_at')
@@ -194,9 +199,14 @@ export async function listProjects(userId: string): Promise<ProjectMeta[]> {
 
 /** 删除项目 */
 export async function deleteProject(userId: string, projectId: string): Promise<void> {
-  if (hasSupabaseConfig()) {
+  if (isSupabaseReady()) {
     const { error } = await supabase.from('projects').delete().eq('id', projectId).eq('user_id', userId);
-    if (!error) return;
+    if (!error) {
+      // 同时清理本地缓存，避免重新登录后看到旧数据
+      const projects = lsGetProjects(userId).filter(p => p.id !== projectId);
+      lsSetProjects(userId, projects);
+      return;
+    }
     console.warn('[Supabase 删除失败，回退到 localStorage]', error);
   }
 

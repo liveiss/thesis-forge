@@ -1,6 +1,8 @@
 'use client';
 
-import { Check, X, Sparkles, Zap, Rocket } from 'lucide-react';
+import { useState } from 'react';
+import { Check, X, Sparkles, Zap, Rocket, RefreshCw } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 export type PlanId = 'free' | 'basic' | 'deep' | 'season';
 
@@ -16,7 +18,7 @@ interface PlanOption {
 
 interface PricingModalProps {
   currentPlan: string;
-  onSelectPlan: (plan: PlanId) => void;
+  onPlanUpgraded?: (plan: Exclude<PlanId, 'free'>, expiresAt: string) => void;
   onClose: () => void;
 }
 
@@ -58,16 +60,60 @@ const plans: PlanOption[] = [
 
 export default function PricingModal({
   currentPlan,
-  onSelectPlan,
+  onPlanUpgraded,
   onClose,
 }: PricingModalProps) {
+  const [selectedPlan, setSelectedPlan] = useState<PlanId | null>(null);
+  const [code, setCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const handleRedeem = async () => {
+    setError('');
+    setSuccess('');
+    if (!selectedPlan || selectedPlan === 'free') return;
+    if (!code.trim()) {
+      setError('请输入激活码');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
+
+      const res = await fetch('/api/redeem', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ code: code.trim().toUpperCase() }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || '兑换失败');
+      } else {
+        setSuccess(data.message || '开通成功');
+        onPlanUpgraded?.(selectedPlan, data.expiresAt);
+        setTimeout(() => onClose(), 1200);
+      }
+    } catch (err) {
+      setError('网络异常，请稍后重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 bg-theme-backdrop backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="bg-theme-card border border-theme-medium rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-y-auto"
+        className="bg-theme-card border border-theme-medium rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="sticky top-0 bg-theme-card/95 backdrop-blur border-b border-theme-subtle px-6 py-4 flex items-center justify-between">
@@ -90,15 +136,17 @@ export default function PricingModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {plans.map(plan => {
               const isCurrent = plan.id === currentPlan;
+              const isSelected = selectedPlan === plan.id;
               const Icon = plan.icon;
               return (
                 <div
                   key={plan.id}
-                  className={`rounded-xl border p-5 ${
+                  onClick={() => plan.id !== 'free' && setSelectedPlan(plan.id)}
+                  className={`rounded-xl border p-5 cursor-pointer transition-all ${
                     plan.highlight
                       ? 'border-cyan-500/20 bg-cyan-500/[0.04]'
                       : 'border-theme-subtle bg-theme-surface-2'
-                  }`}
+                  } ${isSelected ? 'ring-2 ring-cyan-500/40' : 'hover:border-cyan-500/20'}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2.5">
@@ -111,9 +159,7 @@ export default function PricingModal({
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-lg font-bold text-theme-primary">
-                        ¥{plan.price}
-                      </div>
+                      <div className="text-lg font-bold text-theme-primary">¥{plan.price}</div>
                       <div className="text-[10px] text-theme-faint">/ 使用范围</div>
                     </div>
                   </div>
@@ -127,26 +173,45 @@ export default function PricingModal({
                     ))}
                   </ul>
 
-                  <button
-                    onClick={() => onSelectPlan(plan.id)}
-                    disabled={isCurrent}
-                    className={`mt-5 w-full rounded-xl py-2.5 text-xs font-semibold transition-all ${
-                      isCurrent
-                        ? 'bg-theme-surface-4 text-theme-faint cursor-default'
-                        : plan.highlight
-                          ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:brightness-110'
-                          : 'bg-theme-surface-4 hover:bg-theme-surface-6 text-theme-tertiary border border-theme-subtle'
-                    }`}
-                  >
-                    {isCurrent ? '当前套餐' : '本地开通'}
-                  </button>
+                  {isCurrent && (
+                    <div className="mt-5 w-full rounded-xl py-2.5 text-xs font-semibold text-center bg-theme-surface-4 text-theme-faint">
+                      当前套餐
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
 
+          {selectedPlan && selectedPlan !== 'free' && (
+            <div className="mt-5 rounded-xl border border-cyan-500/10 bg-cyan-500/[0.03] p-4">
+              <p className="text-xs text-theme-secondary mb-3">
+                已选套餐：{selectedPlan === 'basic' ? '单篇基础 ¥19.9' : selectedPlan === 'deep' ? '单篇深度 ¥39.9' : '毕业季通行证 ¥99'}
+              </p>
+              <p className="text-[11px] text-theme-dim mb-3 leading-relaxed">
+                添加客服微信转账后获取激活码，在此输入即可开通。激活码区分大小写。
+              </p>
+              <input
+                value={code}
+                onChange={e => setCode(e.target.value.toUpperCase())}
+                placeholder="输入激活码"
+                className="w-full bg-theme-page rounded-xl px-3 py-2.5 text-sm border border-theme-subtle focus:border-cyan-500/30 outline-none mb-3 tracking-widest uppercase"
+                onKeyDown={e => e.key === 'Enter' && handleRedeem()}
+              />
+              {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+              {success && <p className="text-xs text-emerald-500 mb-3">{success}</p>}
+              <button
+                onClick={handleRedeem}
+                disabled={loading || !code.trim()}
+                className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-30 text-white rounded-xl py-2.5 text-xs font-semibold flex items-center justify-center gap-2 transition-all"
+              >
+                {loading ? <RefreshCw size={14} className="animate-spin" /> : '立即开通'}
+              </button>
+            </div>
+          )}
+
           <p className="text-[11px] text-theme-faint text-center mt-5 leading-relaxed">
-            当前为本地模拟开通，正式支付渠道接入后会替换为真实下单流程。
+            付款后请妥善保存激活码，一经兑换即绑定当前账号，不可转让。
           </p>
         </div>
       </div>
