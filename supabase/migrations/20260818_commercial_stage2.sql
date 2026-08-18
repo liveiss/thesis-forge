@@ -177,3 +177,17 @@ comment on table public.redemption_codes is '套餐激活码/兑换码';
   for select
   to authenticated
   using (used_by = auth.uid());
+
+-- ============================================================
+-- 权限修复：确保 authenticated / service_role 能操作表
+-- ============================================================
+grant usage on schema public to authenticated, service_role;
+
+grant select, insert, update, delete on all tables in schema public to authenticated, service_role;
+grant usage, select on all sequences in schema public to authenticated, service_role;
+
+alter default privileges in schema public
+grant select, insert, update, delete on tables to authenticated, service_role;
+
+alter default privileges in schema public
+grant usage, select on sequences to authenticated, service_role;
