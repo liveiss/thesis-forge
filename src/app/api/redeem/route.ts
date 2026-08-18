@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '../../../lib/supabase';
+import { parseCookies } from '../../../lib/cookies';
 
 const PLAN_PRICES: Record<string, number> = {
   basic: 1990, // ¥19.90
@@ -15,8 +16,9 @@ const PLAN_DURATIONS: Record<string, number> = {
 
 export async function POST(request: Request) {
   try {
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const cookieHeader = request.headers.get('cookie');
+    const cookies = parseCookies(cookieHeader);
+    const token = cookies['sb-access-token'];
 
     if (!token) {
       return NextResponse.json({ error: '请先登录', code: 'UNAUTHORIZED' }, { status: 401 });

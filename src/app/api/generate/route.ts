@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { rateLimit, getClientIp } from '../../../lib/rate-limit';
 import { supabase } from '../../../lib/supabase';
+import { parseCookies } from '../../../lib/cookies';
 
 interface ModelInfo {
   id?: string | number;
@@ -40,8 +41,9 @@ async function checkAuth(request: Request): Promise<AuthCheckResult> {
     return { userId: null, plan: 'free' };
   }
 
-  const authHeader = request.headers.get('authorization');
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const cookieHeader = request.headers.get('cookie');
+  const cookies = parseCookies(cookieHeader);
+  const token = cookies['sb-access-token'];
 
   if (!token) {
     return {

@@ -8,7 +8,6 @@ import { maskCitations, restoreCitations } from '../lib/citations';
 import { useAuth } from '../lib/auth';
 import { saveProject, listProjects, deleteProject, getProject, restoreProject, type ProjectMeta } from '../lib/db';
 import { useToast } from './components/ToastProvider';
-import { supabase } from '../lib/supabase';
 
 import LoginModal from './components/LoginModal';
 import ImportView from './components/ImportView';
@@ -91,14 +90,10 @@ export default function Home() {
       return null;
     }
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (session?.access_token) {
-        headers.Authorization = `Bearer ${session.access_token}`;
-      }
       const res = await fetch('/api/generate', {
         method: 'POST',
-        headers,
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...apiConfig, prompt, type }),
       });
       const data = await res.json();

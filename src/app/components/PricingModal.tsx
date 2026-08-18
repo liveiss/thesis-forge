@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { Check, X, Sparkles, Zap, Rocket, RefreshCw } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
 
 export type PlanId = 'free' | 'basic' | 'deep' | 'season';
 
@@ -80,15 +79,10 @@ export default function PricingModal({
 
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (session?.access_token) {
-        headers.Authorization = `Bearer ${session.access_token}`;
-      }
-
       const res = await fetch('/api/redeem', {
         method: 'POST',
-        headers,
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: code.trim().toUpperCase() }),
       });
       const data = await res.json();
